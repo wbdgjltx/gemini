@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #fafafa;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.1);
+        }
+
+        .header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 300;
+            color: #666;
+        }
+
+        .chat-area {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f9f9f9;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 18px;
+            max-width: 70%;
+            word-wrap: break-word;
+        }
+
+        .user-message {
+            background: #007AFF;
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .ai-message {
+            background: white;
+            border: 1px solid #e0e0e0;
+            margin-right: auto;
+        }
+
+        .input-area {
+            padding: 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 10px;
+        }
+
+        .input-field {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #ddd;
+            border-radius: 20px;
+            outline: none;
+            font-size: 16px;
+        }
+
+        .input-field:focus {
+            border-color: #007AFF;
+        }
+
+        .send-button {
+            padding: 12px 24px;
+            background: #007AFF;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background 0.2s;
+        }
+
+        .send-button:hover {
+            background: #0056CC;
+        }
+
+        .send-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #007AFF;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Gemini Chat</h1>
+        </div>
+
+        <div class="chat-area" id="chatArea">
+            <div class="message ai-message">
+                你好！我是 Gemini，有什么可以帮助你的吗？
+            </div>
+        </div>
+
+        <div class="input-area">
+            <input
+                type="text"
+                id="messageInput"
+                class="input-field"
+                placeholder="输入你的消息..."
+                maxlength="1000"
+            >
+            <button id="sendButton" class="send-button">发送</button>
+        </div>
+    </div>
+
+<!-- index.html 中的 <script> 部分 -->
+<script>
+    // API Key 已经移动到安全的后端，前端不再需要它
+    // const API_KEY = '...'; // 确保这一行已被删除！
+
+    // 新的 API URL 指向我们的 Netlify 代理函数
+    const API_URL = '/api/gemini-proxy'; // 使用我们在 toml 中配置的简洁 URL
+
+    const chatArea = document.getElementById('chatArea');
+    const messageInput = document.getElementById('messageInput');
+    const sendButton = document.getElementById('sendButton');
+
+    // addMessage, showLoading, hideLoading 函数保持不变...
+    function addMessage(text, isUser = false) {
+        const messageDiv = document.createElement('div');
+        messageDiv.className = `message ${isUser ? 'user-message' : 'ai-message'}`;
+        // 为了安全，我们使用 textContent，但如果需要渲染 Markdown，需要用专门的库
+        messageDiv.textContent = text;
+        chatArea.appendChild(messageDiv);
+        chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    function showLoading() {
+        const loadingDiv = document.createElement('div');
+        loadingDiv.className = 'message ai-message';
+        loadingDiv.id = 'loadingMessage';
+        loadingDiv.innerHTML = '<div class="loading"></div>';
+        chatArea.appendChild(loadingDiv);
+        chatArea.scrollTop = chatArea.scrollHeight;
+    }
+
+    function hideLoading() {
+        const loadingMessage = document.getElementById('loadingMessage');
+        if (loadingMessage) {
+            loadingMessage.remove();
+        }
+    }
+
+    // 更新 sendMessage 函数来调用我们的代理
+    async function sendMessage(message) {
+        try {
+            showLoading();
+            sendButton.disabled = true;
+
+            // 调用我们自己的后端代理
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    // 不再需要在这里发送 API Key
+                },
+                // 将消息封装在 { message: ... } 对象中，以匹配后端函数的期望
+                body: JSON.stringify({
+                    message: message
+                })
+            });
+
+            hideLoading();
+
+            if (!response.ok) {
+                // 如果我们的代理返回错误，显示它
+                const errorData = await response.json();
+                const errorMessage = errorData.error?.message || `请求失败，状态码: ${response.status}`;
+                throw new Error(errorMessage);
+            }
+
+            const data = await response.json();
+
+            // 响应结构与之前相同
+            if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+                const aiResponse = data.candidates[0].content.parts[0].text;
+                addMessage(aiResponse, false);
+            } else {
+                addMessage('抱歉，我无法处理这个请求。可能是 API 响应格式不正确。', false);
+            }
+        } catch (error) {
+            hideLoading();
+            console.error('Error:', error);
+            addMessage(`连接出现问题：${error.message}`, false);
+        } finally {
+            sendButton.disabled = false;
+        }
+    }
+
+    // 事件监听器部分保持不变...
+    sendButton.addEventListener('click', () => {
+        const message = messageInput.value.trim();
+        if (message) {
+            addMessage(message, true);
+            sendMessage(message);
+            messageInput.value = '';
+        }
+    });
+
+    messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            sendButton.click();
+        }
+    });
+
+    messageInput.focus();
+</script>
+</body>
+</html>

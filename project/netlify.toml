@@ -1,0 +1,7 @@
+[build]
+  functions = "netlify/functions" # 告诉 Netlify 你的云函数在哪里
+
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
